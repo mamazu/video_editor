@@ -1,26 +1,34 @@
+use std::collections::HashMap;
+
+use egui::{Key,};
+
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct Project {
+    paths: Vec<String>,
+}
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
-pub struct TemplateApp {
-    // Example stuff:
-    label: String,
+pub struct VideoEditor {
+    project: Project,
+    side_panel_shown: bool,
 
-    // this how you opt-out of serialization of a member
-    #[serde(skip)]
-    value: f32,
+    #[serde(skip_serializing, skip_deserializing)]
+    textures: HashMap<String,egui::TextureHandle>,
 }
 
-impl Default for TemplateApp {
+impl Default for VideoEditor {
     fn default() -> Self {
-        Self {
-            // Example stuff:
-            label: "Hello World!".to_owned(),
-            value: 2.7,
-        }
+        return Self {
+            project: Project {paths: [].to_vec()},
+            side_panel_shown: true,
+            textures: HashMap::new(),
+        };
     }
 }
 
-impl TemplateApp {
+impl VideoEditor {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // This is also where you can customize the look and feel of egui using
@@ -36,7 +44,18 @@ impl TemplateApp {
     }
 }
 
-impl eframe::App for TemplateApp {
+fn load_image_from_path(path: &std::path::Path) -> Result<egui::ColorImage, image::ImageError> {
+    let image = image::io::Reader::open(path)?.decode()?;
+    let size = [image.width() as _, image.height() as _];
+    let image_buffer = image.to_rgba8();
+    let pixels = image_buffer.as_flat_samples();
+    Ok(egui::ColorImage::from_rgba_unmultiplied(
+            size,
+            pixels.as_slice(),
+            ))
+}
+
+impl eframe::App for VideoEditor {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, eframe::APP_KEY, self);
@@ -45,72 +64,84 @@ impl eframe::App for TemplateApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let Self { label, value } = self;
 
-        // Examples of how to create different panels and windows.
-        // Pick whichever suits you.
-        // Tip: a good default choice is to just keep the `CentralPanel`.
-        // For inspiration and more examples, go to https://emilk.github.io/egui
+        if ctx.input(|i| i.key_pressed(Key::Num1) && i.modifiers.alt) {
+            self.side_panel_shown = !self.side_panel_shown;
+        }
 
-        #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
+                    if ui.button("Open").clicked() {
+                    }
+                    if ui.button("Save").clicked() {
+                    }
+                    #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
                     if ui.button("Quit").clicked() {
                         _frame.close();
                     }
                 });
+                ui.menu_button("View", |ui| {
+                    if self.side_panel_shown {
+                        if ui.button("Hide side menu (Alt+1)").clicked() {
+                            self.side_panel_shown = false;
+                        }
+                    } else {
+                        if ui.button("Show side menu (Alt+1)").clicked() {
+                            self.side_panel_shown = true;
+                        }
+                    }
+                })
             });
         });
 
-        egui::SidePanel::left("side_panel").show(ctx, |ui| {
-            ui.heading("Side Panel");
+        if self.side_panel_shown {
+            egui::SidePanel::left("side_panel").show(ctx, |ui| {
+                ui.heading("Project Explorer");
 
-            ui.horizontal(|ui| {
-                ui.label("Write something: ");
-                ui.text_edit_singleline(label);
+                if ui.button("Add file").clicked() {
+                    if let Some(path) = rfd::FileDialog::new().pick_file() {
+                        let path_str = path.display().to_string();
+                        if !self.textures.contains_key(&path_str) {}
+                        self.textures.insert(path_str.to_string(),
+                            // Load the texture only once.
+                            ui.ctx().load_texture(
+                                "my-image",
+                                load_image_from_path(std::path::Path::new(&path_str)).unwrap(),
+                                Default::default()
+                            )
+                        );
+                        self.project.paths.push(path_str);
+                    }
+                }
+
+                //egui::ScrollArea::vertical()
+                    //.drag_to_scroll(false)
+                    //.show(ui, |ui| {
+                        for item in self.project.paths.iter() {
+                            ui.vertical(|ui| {
+                                let texture = self.textures.get(item);
+                                if let Some(t) = texture {
+                                    let mut image = ui.image(&*t, egui::Vec2::new(100.0, 100.0));
+                                    image.sense = image.sense.union(egui::Sense::drag());
+                                    ui.label(item);
+
+                                    if image.dragged() {
+                                        println!("Hey i am being dragged");
+
+                                    }
+
+                                }
+                            });
+                        }
+                    //});
             });
-
-            ui.add(egui::Slider::new(value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                *value += 1.0;
-            }
-
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label("powered by ");
-                    ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-                    ui.label(" and ");
-                    ui.hyperlink_to(
-                        "eframe",
-                        "https://github.com/emilk/egui/tree/master/crates/eframe",
-                    );
-                    ui.label(".");
-                });
-            });
-        });
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
-
-            ui.heading("eframe template");
-            ui.hyperlink("https://github.com/emilk/eframe_template");
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/master/",
-                "Source code."
-            ));
-            egui::warn_if_debug_build(ui);
+            ui.heading("Timeline");
         });
-
-        if false {
-            egui::Window::new("Window").show(ctx, |ui| {
-                ui.label("Windows can be moved by dragging them.");
-                ui.label("They are automatically sized based on contents.");
-                ui.label("You can turn on resizing and scrolling if you like.");
-                ui.label("You would normally choose either panels OR windows.");
-            });
-        }
     }
 }

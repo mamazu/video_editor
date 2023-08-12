@@ -8,9 +8,9 @@ fn main() -> eframe::Result<()> {
 
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
-        "eframe template",
+        "evideo_editor",
         native_options,
-        Box::new(|cc| Box::new(eframe_template::TemplateApp::new(cc))),
+        Box::new(|cc| Box::new(evideo_editor::VideoEditor::new(cc))),
     )
 }
 
@@ -27,7 +27,7 @@ fn main() {
             .start(
                 "the_canvas_id", // hardcode it
                 web_options,
-                Box::new(|cc| Box::new(eframe_template::TemplateApp::new(cc))),
+                Box::new(|cc| Box::new(eframe_template::VideoEditor::new(cc))),
             )
             .await
             .expect("failed to start eframe");
