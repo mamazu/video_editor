@@ -1,10 +1,40 @@
 use std::collections::HashMap;
 
-use egui::{Key,};
+use egui::Key;
+
+#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Clone)]
+pub struct Clip {
+    start_time: i64,
+    length: i64,
+    path: String,
+}
+
+impl Clip {
+    fn new(start_time: i64, path: String) -> Self {
+        return Self {
+            start_time: start_time,
+            length: 5,
+            path: path
+        }
+    }
+}
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct Project {
     paths: Vec<String>,
+    timeline: Vec<Clip>,
+}
+
+impl Project {
+    pub fn add_clip(mut self, path: String) {
+        let mut new_start_time: i64 = 0;
+        if let Some(last_clip) = self.timeline.last() {
+            new_start_time = last_clip.start_time + last_clip.length;
+        }
+
+        self.timeline.push(Clip::new(new_start_time, path))
+    }
 }
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -21,7 +51,10 @@ pub struct VideoEditor {
 impl Default for VideoEditor {
     fn default() -> Self {
         return Self {
-            project: Project {paths: [].to_vec()},
+            project: Project {
+                paths: [].to_vec(),
+                timeline: [].to_vec()
+            },
             side_panel_shown: true,
             textures: HashMap::new(),
         };
@@ -34,8 +67,6 @@ impl VideoEditor {
         // This is also where you can customize the look and feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
 
-        // Load previous app state (if any).
-        // Note that you must enable the `persistence` feature for this to work.
         if let Some(storage) = cc.storage {
             return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
         }
@@ -49,10 +80,8 @@ fn load_image_from_path(path: &std::path::Path) -> Result<egui::ColorImage, imag
     let size = [image.width() as _, image.height() as _];
     let image_buffer = image.to_rgba8();
     let pixels = image_buffer.as_flat_samples();
-    Ok(egui::ColorImage::from_rgba_unmultiplied(
-            size,
-            pixels.as_slice(),
-            ))
+
+    return Ok(egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()))
 }
 
 impl eframe::App for VideoEditor {
@@ -64,7 +93,6 @@ impl eframe::App for VideoEditor {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-
         if ctx.input(|i| i.key_pressed(Key::Num1) && i.modifiers.alt) {
             self.side_panel_shown = !self.side_panel_shown;
         }
@@ -116,32 +144,49 @@ impl eframe::App for VideoEditor {
                     }
                 }
 
-                //egui::ScrollArea::vertical()
-                    //.drag_to_scroll(false)
-                    //.show(ui, |ui| {
+                egui::ScrollArea::vertical()
+                    .drag_to_scroll(false)
+                    .show(ui, |ui| {
                         for item in self.project.paths.iter() {
                             ui.vertical(|ui| {
                                 let texture = self.textures.get(item);
                                 if let Some(t) = texture {
-                                    let mut image = ui.image(&*t, egui::Vec2::new(100.0, 100.0));
-                                    image.sense = image.sense.union(egui::Sense::drag());
-                                    ui.label(item);
+                                    let image = ui.image(&*t, egui::Vec2::new(100.0, 100.0));
+                                    let image_drag = image.interact(egui::Sense::drag());
 
-                                    if image.dragged() {
-                                        println!("Hey i am being dragged");
-
+                                    if image_drag.drag_released() {
+                                        let s = image.ctx.input(|i| i.pointer.interact_pos()).unwrap();
+                                        // todo: replace with check if it's inside the timeline
+                                        if s.x > 200.0 {
+                                            self.project.add_clip(item.to_string())
+                                        }
+                                        println!("Dropped at: {:?}", s);
                                     }
 
+                                    ui.label(item);
                                 }
                             });
                         }
-                    //});
+                    });
             });
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading("Timeline");
+
+            ui.horizontal(|ui| {
+                for item in self.project.timeline.iter() {
+                    // Render thumbnail
+                    let texture = self.textures.get(&item.path);
+                    if let Some(t) = texture {
+                        ui.image(&*t, egui::Vec2::new(100.0, 100.0));
+                    }
+
+                    ui.label(format!("Start Time: {}", item.start_time));
+                    ui.label(format!("Length: {}", item.length));
+                }
+            })
         });
     }
 }
