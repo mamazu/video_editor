@@ -3,6 +3,13 @@ use std::collections::HashMap;
 use egui::Key;
 
 #[derive(serde::Deserialize, serde::Serialize)]
+#[derive(PartialEq)]
+enum MainViewMode {
+    TIMELINE = 0,
+    CODE = 1,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
 #[derive(Clone)]
 pub struct Clip {
     start_time: i64,
@@ -15,7 +22,7 @@ impl Clip {
         return Self {
             start_time: start_time,
             length: 5,
-            path: path
+            path: path,
         }
     }
 }
@@ -24,6 +31,7 @@ impl Clip {
 pub struct Project {
     paths: Vec<String>,
     timeline: Vec<Clip>,
+    code: String,
 }
 
 fn add_clip( timeline:&mut Vec<Clip>, path: String) {
@@ -41,6 +49,7 @@ fn add_clip( timeline:&mut Vec<Clip>, path: String) {
 pub struct VideoEditor {
     project: Project,
     side_panel_shown: bool,
+    view_mode: MainViewMode,
 
     #[serde(skip_serializing, skip_deserializing)]
     textures: HashMap<String,egui::TextureHandle>,
@@ -51,10 +60,12 @@ impl Default for VideoEditor {
         return Self {
             project: Project {
                 paths: [].to_vec(),
-                timeline: [].to_vec()
+                timeline: [].to_vec(),
+                code: "".to_string()
             },
             side_panel_shown: true,
             textures: HashMap::new(),
+            view_mode: MainViewMode::TIMELINE
         };
     }
 }
@@ -118,6 +129,16 @@ impl eframe::App for VideoEditor {
                             self.side_panel_shown = true;
                         }
                     }
+
+
+                    if ui.add_enabled(MainViewMode::TIMELINE == self.view_mode, egui::Button::new("Code")).clicked() {
+                        self.view_mode = MainViewMode::CODE;
+                    }
+
+                    if ui.add_enabled(MainViewMode::CODE == self.view_mode, egui::Button::new("Timeline")).clicked() {
+                        self.view_mode = MainViewMode::TIMELINE;
+                    }
+
                 })
             });
         });
@@ -170,21 +191,32 @@ impl eframe::App for VideoEditor {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
-            ui.heading("Timeline");
+            match self.view_mode {
+                MainViewMode::TIMELINE => {
+                    ui.heading("Timeline");
 
-            ui.horizontal(|ui| {
-                for item in self.project.timeline.iter() {
-                    // Render thumbnail
-                    let texture = self.textures.get(&item.path);
-                    if let Some(t) = texture {
-                        ui.image(&*t, egui::Vec2::new(100.0, 100.0));
+                    ui.horizontal(|ui| {
+                        for item in self.project.timeline.iter() {
+                            // Render thumbnail
+                            let texture = self.textures.get(&item.path);
+                            if let Some(t) = texture {
+                                ui.image(&*t, egui::Vec2::new(100.0, 100.0));
+                            }
+
+                            ui.label(format!("Start Time: {}", item.start_time));
+                            ui.label(format!("Length: {}", item.length));
+                        }
+                    });
+                },
+                MainViewMode::CODE => {
+                    ui.heading("Code");
+
+                    if ui.text_edit_multiline(&mut self.project.code).changed() {
+                        println!("Code: {}", self.project.code);
                     }
-
-                    ui.label(format!("Start Time: {}", item.start_time));
-                    ui.label(format!("Length: {}", item.length));
                 }
-            })
+            }
+
         });
     }
 }
