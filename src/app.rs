@@ -26,15 +26,13 @@ pub struct Project {
     timeline: Vec<Clip>,
 }
 
-impl Project {
-    pub fn add_clip(mut self, path: String) {
-        let mut new_start_time: i64 = 0;
-        if let Some(last_clip) = self.timeline.last() {
-            new_start_time = last_clip.start_time + last_clip.length;
-        }
-
-        self.timeline.push(Clip::new(new_start_time, path))
+fn add_clip( timeline:&mut Vec<Clip>, path: String) {
+    let mut new_start_time: i64 = 0;
+    if let Some(last_clip) = timeline.last() {
+        new_start_time = last_clip.start_time + last_clip.length;
     }
+
+    timeline.push(Clip::new(new_start_time, path))
 }
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -147,7 +145,7 @@ impl eframe::App for VideoEditor {
                 egui::ScrollArea::vertical()
                     .drag_to_scroll(false)
                     .show(ui, |ui| {
-                        for item in self.project.paths.iter() {
+                        for item in self.project.paths.iter_mut() {
                             ui.vertical(|ui| {
                                 let texture = self.textures.get(item);
                                 if let Some(t) = texture {
@@ -158,12 +156,12 @@ impl eframe::App for VideoEditor {
                                         let s = image.ctx.input(|i| i.pointer.interact_pos()).unwrap();
                                         // todo: replace with check if it's inside the timeline
                                         if s.x > 200.0 {
-                                            self.project.add_clip(item.to_string())
+                                            add_clip(&mut self.project.timeline, item.to_string())
                                         }
                                         println!("Dropped at: {:?}", s);
                                     }
 
-                                    ui.label(item);
+                                    ui.label(item.to_string());
                                 }
                             });
                         }
