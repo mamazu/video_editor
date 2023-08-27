@@ -29,7 +29,7 @@ impl Clip {
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct Project {
-    paths: Vec<String>,
+    pub paths: Vec<String>,
     timeline: Vec<Clip>,
     code: String,
 }
@@ -47,12 +47,12 @@ fn add_clip( timeline:&mut Vec<Clip>, path: String) {
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct VideoEditor {
-    project: Project,
+    pub project: Project,
     side_panel_shown: bool,
     view_mode: MainViewMode,
 
     #[serde(skip_serializing, skip_deserializing)]
-    textures: HashMap<String,egui::TextureHandle>,
+    pub textures: HashMap<String,egui::TextureHandle>,
 }
 
 impl Default for VideoEditor {
@@ -82,6 +82,19 @@ impl VideoEditor {
 
         Default::default()
     }
+
+}
+
+pub fn load_texture(map: &mut HashMap<String,egui::TextureHandle>, path: &str, ctx: &egui::Context)
+{
+    map.insert(path.to_string(),
+        // Load the texture only once.
+        ctx.load_texture(
+            "my-image",
+            load_image_from_path(std::path::Path::new(&path)).unwrap(),
+            Default::default()
+        )
+    );
 }
 
 fn load_image_from_path(path: &std::path::Path) -> Result<egui::ColorImage, image::ImageError> {
@@ -130,7 +143,6 @@ impl eframe::App for VideoEditor {
                         }
                     }
 
-
                     if ui.add_enabled(MainViewMode::TIMELINE == self.view_mode, egui::Button::new("Code")).clicked() {
                         self.view_mode = MainViewMode::CODE;
                     }
@@ -149,17 +161,9 @@ impl eframe::App for VideoEditor {
 
                 if ui.button("Add file").clicked() {
                     if let Some(path) = rfd::FileDialog::new().pick_file() {
-                        let path_str = path.display().to_string();
-                        if !self.textures.contains_key(&path_str) {}
-                        self.textures.insert(path_str.to_string(),
-                            // Load the texture only once.
-                            ui.ctx().load_texture(
-                                "my-image",
-                                load_image_from_path(std::path::Path::new(&path_str)).unwrap(),
-                                Default::default()
-                            )
-                        );
-                        self.project.paths.push(path_str);
+                        let path: String =path.to_str().unwrap().to_string();
+                        load_texture(&mut self.textures, &path, ui.ctx());
+                        self.project.paths.push(path);
                     }
                 }
 
@@ -211,8 +215,9 @@ impl eframe::App for VideoEditor {
                 MainViewMode::CODE => {
                     ui.heading("Code");
 
-                    if ui.text_edit_multiline(&mut self.project.code).changed() {
+                    if ui.text_edit_multiline(&mut self.project.code).lost_focus() {
                         println!("Code: {}", self.project.code);
+                        println!("{:?}", rslint_parser::parse_text(&self.project.code, 0).syntax());
                     }
                 }
             }

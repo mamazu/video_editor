@@ -1,6 +1,17 @@
 #![warn(clippy::all, rust_2018_idioms)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+use eframe::CreationContext;
+use evideo_editor::{app::load_texture, VideoEditor};
+
+fn load_video_editor(cc: &CreationContext<'_>) -> Box<VideoEditor> {
+    let mut video_editor = VideoEditor::new(cc);
+    for texture in &video_editor.project.paths {
+        load_texture(&mut video_editor.textures, &texture, &cc.egui_ctx)
+    }
+    return Box::new(video_editor)
+}
+
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
@@ -10,7 +21,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "evideo_editor",
         native_options,
-        Box::new(|cc| Box::new(evideo_editor::VideoEditor::new(cc))),
+        Box::new(|cc| load_video_editor(cc)),
     )
 }
 
@@ -27,7 +38,7 @@ fn main() {
             .start(
                 "the_canvas_id", // hardcode it
                 web_options,
-                Box::new(|cc| Box::new(eframe_template::VideoEditor::new(cc))),
+                Box::new(|cc| load_video_editor(cc)),
             )
             .await
             .expect("failed to start eframe");
