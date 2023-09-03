@@ -125,8 +125,10 @@ impl eframe::App for VideoEditor {
                 ui.menu_button("File", |ui| {
                     if ui.button("Open").clicked() {
                     }
+
                     if ui.button("Save").clicked() {
                     }
+
                     #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
                     if ui.button("Quit").clicked() {
                         _frame.close();
@@ -195,33 +197,27 @@ impl eframe::App for VideoEditor {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            match self.view_mode {
-                MainViewMode::TIMELINE => {
-                    ui.heading("Timeline");
+            let mut size = ui.available_size();
+            size.y -= 100.0;
+            let code_editor = ui.add_sized(size, egui::TextEdit::multiline(&mut self.project.code));
+            if code_editor.lost_focus() {
+                println!("Code: {}", self.project.code);
+                // run_code(rslint_parser::parse_text(&self.project.code, 0));
+            }
 
-                    ui.horizontal(|ui| {
-                        for item in self.project.timeline.iter() {
-                            // Render thumbnail
-                            let texture = self.textures.get(&item.path);
-                            if let Some(t) = texture {
-                                ui.image(&*t, egui::Vec2::new(100.0, 100.0));
-                            }
-
+            ui.horizontal(|ui| {
+                for item in self.project.timeline.iter() {
+                    // Render thumbnail
+                    let texture = self.textures.get(&item.path);
+                    if let Some(t) = texture {
+                        if ui.image(&*t, egui::Vec2::new(100.0, 100.0)).hovered() {
                             ui.label(format!("Start Time: {}", item.start_time));
                             ui.label(format!("Length: {}", item.length));
                         }
-                    });
-                },
-                MainViewMode::CODE => {
-                    ui.heading("Code");
-
-                    if ui.text_edit_multiline(&mut self.project.code).lost_focus() {
-                        println!("Code: {}", self.project.code);
-                        println!("{:?}", rslint_parser::parse_text(&self.project.code, 0).syntax());
                     }
-                }
-            }
 
+                }
+            });
         });
     }
 }
