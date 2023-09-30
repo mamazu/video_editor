@@ -1,49 +1,74 @@
 #![warn(clippy::all, rust_2018_idioms)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use eframe::CreationContext;
-use evideo_editor::{app::load_texture, VideoEditor};
+use boa_engine::JsError;
+use boa_engine::JsNativeError;
+use boa_engine::JsObject;
+use boa_engine::JsString;
+use boa_engine::object::Object;
+use evideo_editor::VideoEditor;
 use std::env;
+use std::fs;
 
-fn load_video_editor(cc: &CreationContext<'_>) -> Box<VideoEditor> {
-    let mut video_editor = VideoEditor::new(cc);
-    for texture in &video_editor.project.paths {
-        load_texture(&mut video_editor.textures, &texture, &cc.egui_ctx)
-    }
-    return Box::new(video_editor)
-}
+use boa_engine::{Context, Source};
 
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
-fn main_gui() -> eframe::Result<()> {
+fn main_gui(_args: Arguments) -> eframe::Result<()> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
-    let native_options = eframe::NativeOptions::default();
-    eframe::run_native(
+    return eframe::run_native(
         "evideo_editor",
-        native_options,
-        Box::new(|cc| load_video_editor(cc)),
+        eframe::NativeOptions::default(),
+        Box::new(|cc| Box::new(VideoEditor::new(cc))),
     )
 }
+use boa_engine::{JsArgs, JsResult, JsValue};
 
-// When compiling to web using trunk:
-#[cfg(target_arch = "wasm32")]
-fn main_gui() {
-    // Redirect `log` message to `console.log` and friends:
-    eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+fn log(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
+    println!("{:?}",args.get_or_undefined(0).to_string(context)?);
+    return Ok(JsValue::undefined())
+}
 
-    let web_options = eframe::WebOptions::default();
+fn load_clip(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
+    let video_path = args.get_or_undefined(0);
+    if !video_path.is_string() {
+        let error = JsError::from_native(
+            JsNativeError::typ().with_message("First argument of load_clip must be a string")
+        );
+        return Err(error);
+    }
 
-    wasm_bindgen_futures::spawn_local(async {
-        eframe::WebRunner::new()
-            .start(
-                "the_canvas_id", // hardcode it
-                web_options,
-                Box::new(|cc| load_video_editor(cc)),
-            )
-            .await
-            .expect("failed to start eframe");
-    });
+    println!("video path: {:?}", video_path);
+
+    let result = JsObject::with_object_proto(context.intrinsics());
+    let _ = result.create_data_property("path", "hello", context);
+
+    return Ok(JsValue::Object(result))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn main_console(args: Arguments) -> eframe::Result<()>
+{
+    use boa_engine::NativeFunction;
+
+    let contents = fs::read_to_string(args.file_path.unwrap())
+        .expect("Should have been able to read the file");
+
+    let mut context = Context::default();
+    let _ = context.register_global_builtin_callable("log", 1, NativeFunction::from_fn_ptr(log));
+    let _ = context.register_global_builtin_callable("load_clip", 1, NativeFunction::from_fn_ptr(load_clip));
+
+    match context.eval(Source::from_bytes(&contents)) {
+        Ok(res) => {
+            println!("Return value of the program: {:#?}", res.to_string(&mut context).unwrap());
+        }
+        Err(e) => {
+            // Pretty print the error
+            eprintln!("Uncaught {:#?}", e);
+        }
+    };
+    return Ok(())
 }
 
 fn print_help() -> () {
@@ -85,18 +110,18 @@ fn parse_arguments() -> Option<Arguments> {
 }
 
 fn main() -> Result<(), std::io::Error> {
-    let arguments = &parse_arguments();
-
-    if arguments.is_none() {
-        print_help();
-        return Ok(());
+    match parse_arguments() {
+        Some(args) => {
+            if args.gui_mode {
+                main_gui(args).unwrap();
+            } else {
+                main_console(args).unwrap();
+            }
+        },
+        _ => {
+            print_help();
+        }
     }
-
-    if (*arguments).clone().unwrap().gui_mode {
-         main_gui().unwrap();
-    }
-
-    dbg!(arguments.clone());
 
     return Ok(());
 }
