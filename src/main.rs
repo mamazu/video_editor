@@ -5,6 +5,7 @@ use boa_engine::JsError;
 use boa_engine::JsNativeError;
 use boa_engine::JsObject;
 use boa_engine::JsString;
+use boa_engine::NativeFunction;
 use boa_engine::object::Object;
 use evideo_editor::VideoEditor;
 use std::env;
@@ -30,6 +31,11 @@ fn log(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsV
     return Ok(JsValue::undefined())
 }
 
+fn testing(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
+    println!("{:?}",args.get_or_undefined(0).to_string(context)?);
+    return Ok(JsValue::undefined())
+}
+
 fn load_clip(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let video_path = args.get_or_undefined(0);
     if !video_path.is_string() {
@@ -43,8 +49,13 @@ fn load_clip(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResu
 
     let result = JsObject::with_object_proto(context.intrinsics());
     let _ = result.create_data_property("path", "hello", context);
+    let _ = result.create_data_property("hallo", NativeFunction::from_fn_ptr(testing), context);
 
     return Ok(JsValue::Object(result))
+}
+
+fn create_variable(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
+    return Ok(JsValue::undefined())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -58,6 +69,7 @@ fn main_console(args: Arguments) -> eframe::Result<()>
     let mut context = Context::default();
     let _ = context.register_global_builtin_callable("log", 1, NativeFunction::from_fn_ptr(log));
     let _ = context.register_global_builtin_callable("load_clip", 1, NativeFunction::from_fn_ptr(load_clip));
+    let _ = context.register_global_builtin_callable("create_variable", 1, NativeFunction::from_fn_ptr(createVariable));
 
     match context.eval(Source::from_bytes(&contents)) {
         Ok(res) => {
